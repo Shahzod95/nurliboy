@@ -1,14 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+type QueueInfo = {
+  queue_number: number | null;
+  status: "kutilmoqda" | "keldi" | "kelmadi";
+  ahead: number;
+};
 
 export default function RegisterPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [visitorId, setVisitorId] = useState<string | null>(null);
   const [queueNumber, setQueueNumber] = useState<number | null>(null);
+  const [queueInfo, setQueueInfo] = useState<QueueInfo | null>(null);
   const [error, setError] = useState("");
+
+  // Ro'yxatdan o'tgach navbat holatini har 10 soniyada yangilab turish
+  useEffect(() => {
+    if (!visitorId) return;
+    async function fetchQueue() {
+      const res = await fetch(`/api/queue?id=${visitorId}`);
+      if (res.ok) setQueueInfo(await res.json());
+    }
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 10000);
+    return () => clearInterval(interval);
+  }, [visitorId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,6 +45,7 @@ export default function RegisterPage() {
         throw new Error(data?.error || "Xatolik yuz berdi");
       }
       setQueueNumber(data?.queue_number ?? null);
+      setVisitorId(data?.id ?? null);
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Xatolik yuz berdi");
@@ -53,6 +74,32 @@ export default function RegisterPage() {
               </p>
             </div>
           )}
+
+          {queueInfo?.status === "kutilmoqda" && (
+            <div className="mt-4 rounded-xl bg-yellow-50 px-4 py-4">
+              {queueInfo.ahead === 0 ? (
+                <p className="font-semibold text-yellow-800">
+                  Navbat sizniki — tayyor turing!
+                </p>
+              ) : (
+                <p className="text-yellow-800">
+                  Sizdan oldin{" "}
+                  <span className="text-2xl font-bold">{queueInfo.ahead}</span>{" "}
+                  kishi kutmoqda
+                </p>
+              )}
+              <p className="mt-1 text-xs text-yellow-600">
+                Har 10 soniyada avtomatik yangilanadi
+              </p>
+            </div>
+          )}
+
+          {queueInfo?.status === "keldi" && (
+            <p className="mt-4 rounded-xl bg-green-50 px-4 py-4 font-semibold text-green-800">
+              Kelganingiz belgilandi. Xush kelibsiz!
+            </p>
+          )}
+
           <p className="mt-4 text-gray-600">
             {firstName} {lastName}, navbatga qo&apos;shildingiz. Chaqirilishingizni
             kuting.
