@@ -29,6 +29,35 @@ function todayTashkent(): string {
   return new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+// Ma'lumot yuklanayotganda ko'rsatiladigan skeleton qatorlar
+function ListSkeleton() {
+  return (
+    <div className="mt-4 overflow-hidden rounded-xl bg-white shadow">
+      <ul className="divide-y divide-gray-100">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <li
+            key={i}
+            className="flex animate-pulse items-center justify-between p-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gray-200" />
+              <div>
+                <div className="h-4 w-36 rounded bg-gray-200" />
+                <div className="mt-2 h-3 w-24 rounded bg-gray-100" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-20 rounded-full bg-gray-100" />
+              <div className="h-9 w-16 rounded-lg bg-gray-200" />
+              <div className="h-9 w-20 rounded-lg bg-gray-200" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState<string | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
@@ -38,6 +67,7 @@ export default function AdminPage() {
   const [date, setDate] = useState(todayTashkent());
   const [tab, setTab] = useState<Visitor["status"]>("kutilmoqda");
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
 
   // Sahifa yangilanganda sessiondan parolni tiklash
   useEffect(() => {
@@ -65,15 +95,28 @@ export default function AdminPage() {
     []
   );
 
-  // Ro'yxatni yuklash + har 5 soniyada yangilab turish
+  // Ro'yxatni yuklash + har 5 soniyada yangilab turish.
+  // Filter o'zgarganda skeleton ko'rsatiladi, fondagi yangilanishlarda esa yo'q.
   useEffect(() => {
     if (!password) return;
-    fetchVisitors(password, query, date);
+    let cancelled = false;
+    setListLoading(true);
+    const timeout = setTimeout(
+      () =>
+        fetchVisitors(password, query, date).finally(() => {
+          if (!cancelled) setListLoading(false);
+        }),
+      query ? 300 : 0
+    );
     const interval = setInterval(
       () => fetchVisitors(password, query, date),
       5000
     );
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, [password, query, date, fetchVisitors]);
 
   async function handleLogin(e: React.FormEvent) {
@@ -262,7 +305,9 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {list.length === 0 ? (
+        {listLoading ? (
+          <ListSkeleton />
+        ) : list.length === 0 ? (
           <div className="mt-4 rounded-xl bg-white p-8 text-center text-gray-500 shadow">
             Bu bo&apos;limda hech kim yo&apos;q
           </div>
