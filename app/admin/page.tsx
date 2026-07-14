@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 
 type Visitor = {
   id: string;
@@ -23,26 +24,9 @@ const STATUS_LABELS: Record<Visitor["status"], string> = {
   kelmadi: "Kelmadi",
 };
 
-// Yozuvning sanasi (Toshkent vaqti bilan) — kunlik guruhlash uchun
-function dayKey(iso: string): string {
-  return new Date(iso).toLocaleDateString("uz-UZ", {
-    timeZone: "Asia/Tashkent",
-  });
-}
-
-// Kunlar bo'yicha guruhlash (yangi kun tepada),
-// har kun ichida navbat raqami bo'yicha o'sish tartibida
-function groupByDay(visitors: Visitor[]): [string, Visitor[]][] {
-  const groups = new Map<string, Visitor[]>();
-  for (const v of visitors) {
-    const key = dayKey(v.created_at);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(v);
-  }
-  for (const list of groups.values()) {
-    list.sort((a, b) => (a.queue_number ?? 0) - (b.queue_number ?? 0));
-  }
-  return [...groups.entries()];
+// Bugungi sana Toshkent vaqti bilan, YYYY-MM-DD ko'rinishida
+function todayTashkent(): string {
+  return new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 export default function AdminPage() {
@@ -51,6 +35,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [query, setQuery] = useState("");
+  const [date, setDate] = useState(todayTashkent());
   const [tab, setTab] = useState<Visitor["status"]>("kutilmoqda");
   const [loading, setLoading] = useState(false);
 
@@ -61,9 +46,10 @@ export default function AdminPage() {
   }, []);
 
   const fetchVisitors = useCallback(
-    async (pass: string, q: string) => {
-      const params = q ? `?q=${encodeURIComponent(q)}` : "";
-      const res = await fetch(`/api/visitors${params}`, {
+    async (pass: string, q: string, d: string) => {
+      const params = new URLSearchParams({ date: d });
+      if (q) params.set("q", q);
+      const res = await fetch(`/api/visitors?${params}`, {
         headers: { "x-admin-password": pass },
       });
       if (res.status === 401) {
@@ -82,16 +68,19 @@ export default function AdminPage() {
   // Ro'yxatni yuklash + har 5 soniyada yangilab turish
   useEffect(() => {
     if (!password) return;
-    fetchVisitors(password, query);
-    const interval = setInterval(() => fetchVisitors(password, query), 5000);
+    fetchVisitors(password, query, date);
+    const interval = setInterval(
+      () => fetchVisitors(password, query, date),
+      5000
+    );
     return () => clearInterval(interval);
-  }, [password, query, fetchVisitors]);
+  }, [password, query, date, fetchVisitors]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setLoginError("");
-    const res = await fetch("/api/visitors", {
+    const res = await fetch(`/api/visitors?date=${date}`, {
       headers: { "x-admin-password": passwordInput },
     });
     setLoading(false);
@@ -156,19 +145,38 @@ export default function AdminPage() {
     );
   }
 
-  const days = groupByDay(visitors.filter((v) => v.status === tab));
-  const tabCounts = {
+  // Tanlangan kun ro'yxati: aktiv tab bo'yicha, navbat raqami tartibida
+  const list = visitors
+    .filter((v) => v.status === tab)
+    .sort((a, b) => (a.queue_number ?? 0) - (b.queue_number ?? 0));
+  const stats = {
     kutilmoqda: visitors.filter((v) => v.status === "kutilmoqda").length,
     keldi: visitors.filter((v) => v.status === "keldi").length,
     kelmadi: visitors.filter((v) => v.status === "kelmadi").length,
   };
-  const todayKey = dayKey(new Date().toISOString());
-  const todayList = visitors.filter((v) => dayKey(v.created_at) === todayKey);
-  const todayStats = {
-    kutilmoqda: todayList.filter((v) => v.status === "kutilmoqda").length,
-    keldi: todayList.filter((v) => v.status === "keldi").length,
-    kelmadi: todayList.filter((v) => v.status === "kelmadi").length,
-  };
+  const isToday = date === todayTashkent();
+
+  function exportExcel() {
+    const rows = list.map((v) => ({
+      "Navbat №": v.queue_number ?? "",
+      Ism: v.first_name,
+      Familiya: v.last_name,
+      Status: STATUS_LABELS[v.status],
+      Vaqt: new Date(v.created_at).toLocaleString("uz-UZ", {
+        timeZone: "Asia/Tashkent",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Navbat");
+    XLSX.writeFile(wb, `navbat-${date}-${tab}.xlsx`);
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
@@ -191,39 +199,52 @@ export default function AdminPage() {
         {!query && (
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl bg-white p-4 shadow">
-              <p className="text-sm text-gray-500">Bugun jami</p>
+              <p className="text-sm text-gray-500">
+                {isToday ? "Bugun jami" : "Jami"}
+              </p>
               <p className="text-3xl font-bold text-gray-900">
-                {todayList.length}
+                {visitors.length}
               </p>
             </div>
             <div className="rounded-xl bg-white p-4 shadow">
               <p className="text-sm text-yellow-600">Kutilmoqda</p>
               <p className="text-3xl font-bold text-yellow-600">
-                {todayStats.kutilmoqda}
+                {stats.kutilmoqda}
               </p>
             </div>
             <div className="rounded-xl bg-white p-4 shadow">
               <p className="text-sm text-green-600">Keldi</p>
-              <p className="text-3xl font-bold text-green-600">
-                {todayStats.keldi}
-              </p>
+              <p className="text-3xl font-bold text-green-600">{stats.keldi}</p>
             </div>
             <div className="rounded-xl bg-white p-4 shadow">
               <p className="text-sm text-red-600">Kelmadi</p>
-              <p className="text-3xl font-bold text-red-600">
-                {todayStats.kelmadi}
-              </p>
+              <p className="text-3xl font-bold text-red-600">{stats.kelmadi}</p>
             </div>
           </div>
         )}
 
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ism yoki familiya bo'yicha qidirish..."
-          className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        />
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Ism yoki familiya bo'yicha qidirish..."
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
+          <button
+            onClick={exportExcel}
+            disabled={list.length === 0}
+            className="shrink-0 rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ⬇ Excel
+          </button>
+        </div>
 
         <div className="mt-4 flex rounded-xl bg-white p-1 shadow">
           {(["kutilmoqda", "keldi", "kelmadi"] as const).map((s) => (
@@ -232,33 +253,23 @@ export default function AdminPage() {
               onClick={() => setTab(s)}
               className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
                 tab === s
-                  ? s === "kutilmoqda"
-                    ? "bg-yellow-100 text-yellow-800"
-                    : s === "keldi"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
+                  ? STATUS_STYLES[s]
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              {STATUS_LABELS[s]} ({tabCounts[s]})
+              {STATUS_LABELS[s]} ({stats[s]})
             </button>
           ))}
         </div>
 
-        {days.length === 0 && (
+        {list.length === 0 ? (
           <div className="mt-4 rounded-xl bg-white p-8 text-center text-gray-500 shadow">
             Bu bo&apos;limda hech kim yo&apos;q
           </div>
-        )}
-
-        {days.map(([day, list]) => (
-          <section key={day} className="mt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
-              {day === todayKey ? "Bugun" : day} — {list.length} kishi
-            </h2>
-            <div className="overflow-hidden rounded-xl bg-white shadow">
-              <ul className="divide-y divide-gray-100">
-                {list.map((v) => (
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-xl bg-white shadow">
+            <ul className="divide-y divide-gray-100">
+              {list.map((v) => (
                 <li
                   key={v.id}
                   className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -273,6 +284,7 @@ export default function AdminPage() {
                       </p>
                       <p className="text-sm text-gray-500">
                         {new Date(v.created_at).toLocaleString("uz-UZ", {
+                          timeZone: "Asia/Tashkent",
                           day: "2-digit",
                           month: "2-digit",
                           hour: "2-digit",
@@ -302,12 +314,11 @@ export default function AdminPage() {
                       Kelmadi
                     </button>
                   </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-        ))}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </main>
   );

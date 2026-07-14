@@ -35,18 +35,29 @@ export async function POST(req: Request) {
   return NextResponse.json(data, { status: 201 });
 }
 
-// Ro'yxatni olish — faqat admin uchun. ?q= bilan ism/familiya bo'yicha filter
+// Ro'yxatni olish — faqat admin uchun.
+// ?q= ism/familiya bo'yicha, ?date=YYYY-MM-DD kun bo'yicha (Toshkent vaqti) filter
 export async function GET(req: Request) {
   if (!isAdmin(req)) {
     return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 401 });
   }
 
-  const q = new URL(req.url).searchParams.get("q")?.trim();
+  const params = new URL(req.url).searchParams;
+  const q = params.get("q")?.trim();
+  const date = params.get("date")?.trim();
 
   let query = supabaseAdmin()
     .from("visitors")
     .select()
     .order("created_at", { ascending: false });
+
+  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const dayStart = new Date(`${date}T00:00:00+05:00`);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    query = query
+      .gte("created_at", dayStart.toISOString())
+      .lt("created_at", dayEnd.toISOString());
+  }
 
   if (q) {
     query = query.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
