@@ -7,6 +7,7 @@ export default function RegisterPage() {
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [queueNumber, setQueueNumber] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
@@ -19,10 +20,11 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ firstName, lastName }),
       });
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
         throw new Error(data?.error || "Xatolik yuz berdi");
       }
+      setQueueNumber(data?.queue_number ?? null);
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Xatolik yuz berdi");
@@ -41,7 +43,17 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold text-gray-900">
             Ro&apos;yxatdan o&apos;tdingiz!
           </h1>
-          <p className="mt-2 text-gray-600">
+          {queueNumber !== null && (
+            <div className="mt-6 rounded-xl bg-blue-50 py-6">
+              <p className="text-sm font-medium text-blue-700">
+                Sizning navbat raqamingiz
+              </p>
+              <p className="mt-1 text-6xl font-extrabold text-blue-600">
+                {queueNumber}
+              </p>
+            </div>
+          )}
+          <p className="mt-4 text-gray-600">
             {firstName} {lastName}, navbatga qo&apos;shildingiz. Chaqirilishingizni
             kuting.
           </p>

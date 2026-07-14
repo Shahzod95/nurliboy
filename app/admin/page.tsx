@@ -7,6 +7,7 @@ type Visitor = {
   first_name: string;
   last_name: string;
   status: "kutilmoqda" | "keldi" | "kelmadi";
+  queue_number: number | null;
   created_at: string;
 };
 
@@ -170,18 +171,23 @@ export default function AdminPage() {
                   key={v.id}
                   className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {v.first_name} {v.last_name}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(v.created_at).toLocaleString("uz-UZ", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
+                      {v.queue_number ?? "—"}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {v.first_name} {v.last_name}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(v.created_at).toLocaleString("uz-UZ", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
