@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Navbat tizimi
 
-## Getting Started
+Online navbatga yozilish tizimi: tashrif buyuruvchi QR kod orqali formani ochadi,
+ism-familiyasini yuboradi, admin panelda ro'yxat real vaqtda ko'rinadi va
+"keldi / kelmadi" belgilanadi.
 
-First, run the development server:
+**Stack:** Next.js (App Router) + Supabase (PostgreSQL) + Vercel
+
+## Sahifalar
+
+| Yo'l | Vazifasi |
+|------|----------|
+| `/register` | Navbatga yozilish formasi (QR kod shu manzilga olib boradi) |
+| `/admin` | Admin panel — parol bilan himoyalangan, qidiruv va status belgilash |
+
+## Ishga tushirish
+
+### 1. Supabase sozlash
+
+1. [supabase.com](https://supabase.com) da tekin akkaunt oching va yangi loyiha yarating.
+2. **SQL Editor** bo'limiga o'ting va `supabase/schema.sql` faylidagi SQL'ni ishga tushiring.
+3. **Project Settings → API** dan `URL` va `service_role` kalitni ko'chirib oling.
+
+### 2. Muhit o'zgaruvchilari
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` faylini to'ldiring:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+SUPABASE_URL=https://xxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+ADMIN_PASSWORD=maxfiy-parol
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Lokal ishga tushirish
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+http://localhost:3000/register — forma, http://localhost:3000/admin — admin panel.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Vercel'ga deploy qilish
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Loyihani GitHub'ga push qiling.
+2. [vercel.com](https://vercel.com) da GitHub repo'ni import qiling.
+3. **Environment Variables** bo'limiga `.env.local` dagi 3 ta o'zgaruvchini qo'shing.
+4. Deploy tugagach, `https://loyihangiz.vercel.app/register` manzili uchun QR kod
+   yarating (masalan, [qr-code-generator.com](https://www.qr-code-generator.com)) va chop eting.
 
-## Deploy on Vercel
+## Xavfsizlik haqida
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `service_role` kalit faqat serverda (API route'larda) ishlatiladi, brauzerga chiqmaydi.
+- `visitors` jadvalida RLS yoqilgan — Supabase'ga to'g'ridan-to'g'ri kirish yopiq,
+  barcha so'rovlar backend orqali o'tadi.
+- Admin so'rovlari `x-admin-password` header orqali tekshiriladi.
