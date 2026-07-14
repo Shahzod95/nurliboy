@@ -23,6 +23,28 @@ const STATUS_LABELS: Record<Visitor["status"], string> = {
   kelmadi: "Kelmadi",
 };
 
+// Yozuvning sanasi (Toshkent vaqti bilan) — kunlik guruhlash uchun
+function dayKey(iso: string): string {
+  return new Date(iso).toLocaleDateString("uz-UZ", {
+    timeZone: "Asia/Tashkent",
+  });
+}
+
+// Kunlar bo'yicha guruhlash (yangi kun tepada),
+// har kun ichida navbat raqami bo'yicha o'sish tartibida
+function groupByDay(visitors: Visitor[]): [string, Visitor[]][] {
+  const groups = new Map<string, Visitor[]>();
+  for (const v of visitors) {
+    const key = dayKey(v.created_at);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(v);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => (a.queue_number ?? 0) - (b.queue_number ?? 0));
+  }
+  return [...groups.entries()];
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState<string | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
@@ -133,6 +155,15 @@ export default function AdminPage() {
     );
   }
 
+  const days = groupByDay(visitors);
+  const todayKey = dayKey(new Date().toISOString());
+  const todayList = days.find(([day]) => day === todayKey)?.[1] ?? [];
+  const todayStats = {
+    kutilmoqda: todayList.filter((v) => v.status === "kutilmoqda").length,
+    keldi: todayList.filter((v) => v.status === "keldi").length,
+    kelmadi: todayList.filter((v) => v.status === "kelmadi").length,
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
       <div className="mx-auto max-w-4xl">
@@ -151,22 +182,57 @@ export default function AdminPage() {
           </button>
         </div>
 
+        {!query && (
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl bg-white p-4 shadow">
+              <p className="text-sm text-gray-500">Bugun jami</p>
+              <p className="text-3xl font-bold text-gray-900">
+                {todayList.length}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-4 shadow">
+              <p className="text-sm text-yellow-600">Kutilmoqda</p>
+              <p className="text-3xl font-bold text-yellow-600">
+                {todayStats.kutilmoqda}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-4 shadow">
+              <p className="text-sm text-green-600">Keldi</p>
+              <p className="text-3xl font-bold text-green-600">
+                {todayStats.keldi}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-4 shadow">
+              <p className="text-sm text-red-600">Kelmadi</p>
+              <p className="text-3xl font-bold text-red-600">
+                {todayStats.kelmadi}
+              </p>
+            </div>
+          </div>
+        )}
+
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Ism yoki familiya bo'yicha qidirish..."
-          className="mt-6 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
         />
 
-        <div className="mt-4 overflow-hidden rounded-xl bg-white shadow">
-          {visitors.length === 0 ? (
-            <p className="p-8 text-center text-gray-500">
-              Hozircha hech kim yo&apos;q
-            </p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {visitors.map((v) => (
+        {days.length === 0 && (
+          <div className="mt-4 rounded-xl bg-white p-8 text-center text-gray-500 shadow">
+            Hozircha hech kim yo&apos;q
+          </div>
+        )}
+
+        {days.map(([day, list]) => (
+          <section key={day} className="mt-6">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+              {day === todayKey ? "Bugun" : day} — {list.length} kishi
+            </h2>
+            <div className="overflow-hidden rounded-xl bg-white shadow">
+              <ul className="divide-y divide-gray-100">
+                {list.map((v) => (
                 <li
                   key={v.id}
                   className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -210,11 +276,12 @@ export default function AdminPage() {
                       Kelmadi
                     </button>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        ))}
       </div>
     </main>
   );
