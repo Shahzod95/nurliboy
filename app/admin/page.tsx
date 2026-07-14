@@ -51,6 +51,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<Visitor["status"]>("kutilmoqda");
   const [loading, setLoading] = useState(false);
 
   // Sahifa yangilanganda sessiondan parolni tiklash
@@ -155,9 +156,14 @@ export default function AdminPage() {
     );
   }
 
-  const days = groupByDay(visitors);
+  const days = groupByDay(visitors.filter((v) => v.status === tab));
+  const tabCounts = {
+    kutilmoqda: visitors.filter((v) => v.status === "kutilmoqda").length,
+    keldi: visitors.filter((v) => v.status === "keldi").length,
+    kelmadi: visitors.filter((v) => v.status === "kelmadi").length,
+  };
   const todayKey = dayKey(new Date().toISOString());
-  const todayList = days.find(([day]) => day === todayKey)?.[1] ?? [];
+  const todayList = visitors.filter((v) => dayKey(v.created_at) === todayKey);
   const todayStats = {
     kutilmoqda: todayList.filter((v) => v.status === "kutilmoqda").length,
     keldi: todayList.filter((v) => v.status === "keldi").length,
@@ -219,9 +225,29 @@ export default function AdminPage() {
           className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
         />
 
+        <div className="mt-4 flex rounded-xl bg-white p-1 shadow">
+          {(["kutilmoqda", "keldi", "kelmadi"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setTab(s)}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                tab === s
+                  ? s === "kutilmoqda"
+                    ? "bg-yellow-100 text-yellow-800"
+                    : s === "keldi"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {STATUS_LABELS[s]} ({tabCounts[s]})
+            </button>
+          ))}
+        </div>
+
         {days.length === 0 && (
           <div className="mt-4 rounded-xl bg-white p-8 text-center text-gray-500 shadow">
-            Hozircha hech kim yo&apos;q
+            Bu bo&apos;limda hech kim yo&apos;q
           </div>
         )}
 
