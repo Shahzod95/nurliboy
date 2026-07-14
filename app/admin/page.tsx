@@ -197,13 +197,15 @@ export default function AdminPage() {
                     </span>
                     <button
                       onClick={() => setStatus(v.id, "keldi")}
-                      className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700"
+                      disabled={v.status !== "kutilmoqda"}
+                      className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Keldi
                     </button>
                     <button
                       onClick={() => setStatus(v.id, "kelmadi")}
-                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+                      disabled={v.status !== "kutilmoqda"}
+                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Kelmadi
                     </button>
