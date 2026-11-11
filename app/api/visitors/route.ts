@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { isAdmin } from "@/lib/auth";
+import { isQueueEnabled } from "@/lib/config";
 
 // Ro'yxatdan o'tish — ochiq endpoint (QR orqali kelganlar uchun)
 export async function POST(req: Request) {
+  if (!isQueueEnabled()) {
+    return NextResponse.json(
+      { error: "Navbatga yozilish vaqtincha to'xtatilgan" },
+      { status: 503 }
+    );
+  }
+
   let body: { firstName?: string; lastName?: string };
   try {
     body = await req.json();
