@@ -10,7 +10,7 @@ import { eyebrow } from "./ui";
 type Section = "issues" | "queue";
 
 const SECTIONS: { key: Section; label: string }[] = [
-  { key: "issues", label: "Muammolar" },
+  { key: "issues", label: "Xizmatlar" },
   { key: "queue", label: "Navbat arxivi" },
 ];
 
