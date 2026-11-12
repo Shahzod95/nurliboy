@@ -250,10 +250,7 @@ export default function IssueForm() {
               Navoiy davlat universiteti
             </p>
             <Ornament className="mt-4" />
-            <h1 className="mt-5 font-display text-4xl font-semibold leading-[1.1] sm:text-5xl">
-              Qaysi xizmatda muammoga duch keldingiz?
-            </h1>
-            <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-ivory/65">
+            <p className="mx-auto mt-5 max-w-md text-sm leading-relaxed text-ivory/65">
               Registrator ofisi har bir murojaatni e&apos;tibor bilan ko&apos;rib
               chiqadi. Bu bir necha daqiqa vaqtingizni oladi.
             </p>
@@ -324,7 +321,7 @@ export default function IssueForm() {
           <section className="space-y-6">
             <StepTitle
               n={2}
-              title="Muammo bo'lgan xizmatlar"
+              title="Xizmatlarni tanlang"
               hint="Bir nechta xizmatni belgilashingiz mumkin"
             />
 

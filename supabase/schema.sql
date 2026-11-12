@@ -40,6 +40,11 @@ create table service_issues (
   description text,
   status text not null default 'yangi'
     check (status in ('yangi', 'korib_chiqilmoqda', 'hal_qilindi')),
+  -- murojaatni ko'rib chiqayotgan / hal qilgan menejer
+  manager_first_name text,
+  manager_last_name text,
+  taken_at timestamptz,
+  resolved_at timestamptz,
   created_at timestamptz not null default now()
 );
 

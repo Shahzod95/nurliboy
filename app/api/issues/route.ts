@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { isAdmin } from "@/lib/auth";
-import { SERVICES_BY_ID } from "@/lib/services";
+import { SERVICES_BY_ID, normalizeServiceIds } from "@/lib/services";
 import {
   DESCRIPTION_MAX,
   NAME_MAX,
@@ -67,19 +67,24 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const uniqueIds = [...new Set(body.serviceIds)];
-  const serviceIds = uniqueIds.filter(
-    (id): id is string =>
-      typeof id === "string" && Object.hasOwn(SERVICES_BY_ID, id)
-  );
-  if (serviceIds.length === 0 || serviceIds.length !== uniqueIds.length) {
+  const rawIds: unknown[] = body.serviceIds;
+  if (!rawIds.every((id): id is string => typeof id === "string")) {
     return NextResponse.json(
-      {
-        error:
-          serviceIds.length === 0
-            ? "Kamida bitta xizmatni tanlang"
-            : "Noto'g'ri xizmat tanlangan",
-      },
+      { error: "Noto'g'ri xizmat tanlangan" },
+      { status: 400 }
+    );
+  }
+  // Eski ID'lar (sahifa yangilanmagan bo'lsa) yangilariga o'tkaziladi, takrorlar olib tashlanadi
+  const serviceIds = normalizeServiceIds(rawIds);
+  if (serviceIds.length === 0) {
+    return NextResponse.json(
+      { error: "Kamida bitta xizmatni tanlang" },
+      { status: 400 }
+    );
+  }
+  if (!serviceIds.every((id) => Object.hasOwn(SERVICES_BY_ID, id))) {
+    return NextResponse.json(
+      { error: "Noto'g'ri xizmat tanlangan" },
       { status: 400 }
     );
   }
@@ -154,7 +159,12 @@ export async function GET(req: Request) {
       console.error("Supabase error:", error.message);
       return NextResponse.json({ error: "Server xatosi" }, { status: 500 });
     }
-    issues.push(...(data as Issue[]));
+    issues.push(
+      ...(data as Issue[]).map((i) => ({
+        ...i,
+        service_ids: normalizeServiceIds(i.service_ids),
+      }))
+    );
     if (data.length < PAGE_SIZE) break;
   }
 

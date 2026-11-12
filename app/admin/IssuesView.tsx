@@ -6,6 +6,7 @@ import {
   CATEGORIES_BY_ID,
   SERVICE_CATEGORIES,
   SERVICES_BY_ID,
+  serviceLabel,
 } from "@/lib/services";
 import {
   ISSUE_STATUSES,
@@ -15,6 +16,8 @@ import {
   type Issue,
   type IssueStatus,
   formatPhone,
+  managerName,
+  NAME_MAX,
 } from "@/lib/issues";
 import {
   TONES,
@@ -160,6 +163,12 @@ export default function IssuesView({
   const [tab, setTab] = useState<StatusTab>("yangi");
   const [categoryId, setCategoryId] = useState("");
   const [serviceId, setServiceId] = useState("");
+  // Menejer biriktirish formasi: qaysi murojaat va qaysi statusga o'tkazilmoqda
+  const [assigning, setAssigning] = useState<{ id: string; status: IssueStatus } | null>(null);
+  const [managerFirst, setManagerFirst] = useState("");
+  const [managerLast, setManagerLast] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ id: string; text: string } | null>(null);
 
   const [from, to] =
     preset === "today"
@@ -225,6 +234,7 @@ export default function IssuesView({
     return issues.filter(
       (i) =>
         `${i.first_name} ${i.last_name}`.toLowerCase().includes(q) ||
+        !!managerName(i)?.toLowerCase().includes(q) ||
         (qDigits.length >= 3 && !!i.phone?.includes(qDigits))
     );
   }, [issues, query]);
@@ -264,7 +274,7 @@ export default function IssuesView({
     .filter(([id]) => !categoryId || SERVICES_BY_ID[id]?.categoryId === categoryId)
     .map(([id, count]) => ({
       id,
-      label: SERVICES_BY_ID[id]?.name ?? `Noma'lum xizmat (${id})`,
+      label: serviceLabel(id),
       count,
     }))
     .sort((a, b) => b.count - a.count);
@@ -296,30 +306,78 @@ export default function IssuesView({
     if (id) setCategoryId(SERVICES_BY_ID[id]?.categoryId ?? "");
   }
 
-  async function setStatus(id: string, status: IssueStatus) {
-    const previous = issues.find((i) => i.id === id)?.status;
-    const apply = (s: IssueStatus) =>
-      setData(
-        (prev) =>
-          prev && {
-            ...prev,
-            issues: prev.issues.map((i) => (i.id === id ? { ...i, status: s } : i)),
-          }
-      );
+  // Statusni o'zgartirish. Mas'ul menejeri yo'q murojaatni "Ko'rib chiqilmoqda"
+  // yoki "Hal qilindi"ga o'tkazishdan oldin menejer ism-familiyasi so'raladi.
+  function requestStatus(issue: Issue, status: IssueStatus) {
+    setActionError(null);
+    if (status !== "yangi" && !managerName(issue)) {
+      // Shu brauzerda oxirgi marta kiritilgan ism-familiyani taklif qilamiz
+      try {
+        setManagerFirst(localStorage.getItem("manager_first_name") ?? "");
+        setManagerLast(localStorage.getItem("manager_last_name") ?? "");
+      } catch {}
+      setAssigning({ id: issue.id, status });
+      return;
+    }
+    saveStatus(issue.id, { status });
+  }
 
-    apply(status); // optimistik yangilash
+  async function saveStatus(
+    id: string,
+    payload: { status: IssueStatus; managerFirstName?: string; managerLastName?: string }
+  ) {
+    setSavingId(id);
+    setActionError(null);
     const res = await fetch(`/api/issues/${id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         "x-admin-password": password,
       },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(payload),
     }).catch(() => null);
-    if (res?.status === 401) onUnauthorized();
-    else if (!res?.ok && previous) {
-      apply(previous); // saqlanmadi — eski holatga qaytarish
-      setLoadError("Statusni saqlab bo'lmadi");
+    setSavingId(null);
+
+    if (res?.status === 401) {
+      onUnauthorized();
+      return false;
+    }
+    const body = await res?.json().catch(() => null);
+    if (!res?.ok) {
+      setActionError({ id, text: body?.error || "Statusni saqlab bo'lmadi" });
+      return false;
+    }
+    const updated = body as Issue;
+    setData(
+      (prev) =>
+        prev && {
+          ...prev,
+          issues: prev.issues.map((i) => (i.id === id ? updated : i)),
+        }
+    );
+    return true;
+  }
+
+  async function submitManager(e: React.FormEvent) {
+    e.preventDefault();
+    if (!assigning) return;
+    const first = managerFirst.trim();
+    const last = managerLast.trim();
+    if (!first || !last) {
+      setActionError({ id: assigning.id, text: "Ism va familiyani kiriting" });
+      return;
+    }
+    const ok = await saveStatus(assigning.id, {
+      status: assigning.status,
+      managerFirstName: first,
+      managerLastName: last,
+    });
+    if (ok) {
+      try {
+        localStorage.setItem("manager_first_name", first);
+        localStorage.setItem("manager_last_name", last);
+      } catch {}
+      setAssigning(null);
     }
   }
 
@@ -329,7 +387,7 @@ export default function IssuesView({
       Familiya: i.last_name,
       Telefon: i.phone ? formatPhone(i.phone) : "",
       Xizmatlar: i.service_ids
-        .map((id) => SERVICES_BY_ID[id]?.name ?? id)
+        .map(serviceLabel)
         .join("; "),
       "Yo'nalishlar": [
         ...new Set(
@@ -342,7 +400,10 @@ export default function IssuesView({
         .join("; "),
       Muammo: i.description ?? "",
       Status: ISSUE_STATUS_LABELS[i.status],
+      "Mas'ul menejer": managerName(i) ?? "",
       Vaqt: formatTime(i.created_at, true),
+      "Ko'rib chiqishga olingan": i.taken_at ? formatTime(i.taken_at, true) : "",
+      "Hal qilingan": i.resolved_at ? formatTime(i.resolved_at, true) : "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     ws["!cols"] = [
@@ -353,6 +414,9 @@ export default function IssuesView({
       { wch: 40 },
       { wch: 50 },
       { wch: 18 },
+      { wch: 24 },
+      { wch: 18 },
+      { wch: 22 },
       { wch: 18 },
     ];
 
@@ -376,11 +440,16 @@ export default function IssuesView({
     <>
       {/* Sarlavha va filtrlar */}
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+        <div className="max-w-xl">
           <p className={eyebrow}>Murojaatlar tahlili</p>
-          <h2 className="mt-1 font-display text-4xl font-semibold text-ink">
-            Xizmatlardagi muammolar
+          <h2 className="mt-1 font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">
+            <span className="block">Navoiy davlat universiteti</span>
+            <span className="block">Registrator ofisi</span>
           </h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Talabalarga tezkor va sifatli xizmat ko‘rsatish maqsadida onlayn
+            navbat olish platformasi
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className={segmented}>
@@ -428,7 +497,7 @@ export default function IssuesView({
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ism, familiya yoki telefon bo'yicha qidirish…"
+          placeholder="Talaba, telefon yoki menejer bo'yicha qidirish…"
           className={`${field} flex-1`}
         />
       </div>
@@ -514,7 +583,7 @@ export default function IssuesView({
           )}
           {serviceId && (
             <span className="rounded-full border border-gold/40 bg-gold/[0.06] px-3 py-1 text-ink">
-              {SERVICES_BY_ID[serviceId]?.name}
+              {serviceLabel(serviceId)}
             </span>
           )}
           <button
@@ -578,24 +647,28 @@ export default function IssuesView({
                       <span aria-hidden>{STATUS_ICONS[i.status]}</span>
                       {ISSUE_STATUS_LABELS[i.status]}
                     </span>
-                    {i.status === "yangi" && (
+                    {assigning?.id !== i.id && i.status === "yangi" && (
                       <button
-                        onClick={() => setStatus(i.id, "korib_chiqilmoqda")}
-                        className={btnOutline}
+                        onClick={() => requestStatus(i, "korib_chiqilmoqda")}
+                        disabled={savingId === i.id}
+                        className={btnPrimary}
                       >
                         Ko&apos;rib chiqish
                       </button>
                     )}
-                    {i.status !== "hal_qilindi" ? (
+                    {assigning?.id !== i.id && i.status === "korib_chiqilmoqda" && (
                       <button
-                        onClick={() => setStatus(i.id, "hal_qilindi")}
+                        onClick={() => requestStatus(i, "hal_qilindi")}
+                        disabled={savingId === i.id}
                         className={btnPrimary}
                       >
                         Hal qilindi
                       </button>
-                    ) : (
+                    )}
+                    {assigning?.id !== i.id && i.status === "hal_qilindi" && (
                       <button
-                        onClick={() => setStatus(i.id, "yangi")}
+                        onClick={() => requestStatus(i, "korib_chiqilmoqda")}
+                        disabled={savingId === i.id}
                         className={btnOutline}
                       >
                         Qayta ochish
@@ -603,6 +676,91 @@ export default function IssuesView({
                     )}
                   </div>
                 </div>
+
+                {/* Mas'ul menejer */}
+                {managerName(i) && (
+                  <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+                    <span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark">
+                        Mas&apos;ul
+                      </span>{" "}
+                      <span className="font-semibold text-ink">{managerName(i)}</span>
+                    </span>
+                    {i.taken_at && (
+                      <span className="tabular-nums">olindi {formatTime(i.taken_at)}</span>
+                    )}
+                    {i.status === "hal_qilindi" && i.resolved_at && (
+                      <span className="tabular-nums">
+                        · hal qilindi {formatTime(i.resolved_at)}
+                      </span>
+                    )}
+                  </p>
+                )}
+
+                {/* Menejer ism-familiyasini so'rash */}
+                {assigning?.id === i.id && (
+                  <form
+                    onSubmit={submitManager}
+                    className="mt-4 rounded-2xl border border-gold/50 bg-gold/[0.05] p-4"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-dark">
+                      Mas&apos;ul menejer
+                    </p>
+                    <p className="mt-1 text-sm text-ink/75">
+                      {assigning.status === "hal_qilindi"
+                        ? "Murojaatni kim hal qildi? Ism va familiyangizni kiriting."
+                        : "Murojaatni kim ko'rib chiqadi? Ism va familiyangizni kiriting."}
+                    </p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={managerFirst}
+                        onChange={(e) => setManagerFirst(e.target.value)}
+                        required
+                        autoFocus
+                        maxLength={NAME_MAX}
+                        placeholder="Ism"
+                        aria-label="Menejer ismi"
+                        className={`${field} flex-1`}
+                      />
+                      <input
+                        type="text"
+                        value={managerLast}
+                        onChange={(e) => setManagerLast(e.target.value)}
+                        required
+                        maxLength={NAME_MAX}
+                        placeholder="Familiya"
+                        aria-label="Menejer familiyasi"
+                        className={`${field} flex-1`}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={savingId === i.id}
+                          className={btnPrimary}
+                        >
+                          {savingId === i.id ? "Saqlanmoqda" : "Tasdiqlash"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAssigning(null);
+                            setActionError(null);
+                          }}
+                          className={btnOutline}
+                        >
+                          Bekor qilish
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                )}
+
+                {actionError?.id === i.id && (
+                  <p className={`mt-3 rounded-xl border px-4 py-2.5 text-sm ${TONES.rust}`}>
+                    {actionError.text}
+                  </p>
+                )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {i.service_ids.map((id) => (
                     <button
@@ -615,7 +773,7 @@ export default function IssuesView({
                           : "border-line bg-white text-ink/80 hover:border-gold"
                       }`}
                     >
-                      {SERVICES_BY_ID[id]?.name ?? id}
+                      {serviceLabel(id)}
                     </button>
                   ))}
                 </div>

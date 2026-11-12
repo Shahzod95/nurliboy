@@ -23,8 +23,21 @@ export type Issue = {
   service_ids: string[];
   description: string | null;
   status: IssueStatus;
+  manager_first_name: string | null;
+  manager_last_name: string | null;
+  taken_at: string | null;
+  resolved_at: string | null;
   created_at: string;
 };
+
+// Mas'ul menejerning to'liq ismi (bo'lmasa null)
+export function managerName(issue: Issue): string | null {
+  const name = [issue.manager_first_name, issue.manager_last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return name || null;
+}
 
 export const DESCRIPTION_MAX = 1000;
 export const NAME_MAX = 100;
